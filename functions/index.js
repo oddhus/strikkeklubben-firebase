@@ -1,6 +1,6 @@
 const functions = require('firebase-functions')
 const admin = require('firebase-admin')
-const moment = require('moment')
+const mimeTypes = require('mimetypes')
 admin.initializeApp()
 
 
@@ -24,7 +24,35 @@ const db = admin.firestore()
 //     });
 // });
 
-exports.createPublicProfile = functions.https.onCall((data, context) => {
+exports.createProject = functions.https.onCall(async (data, context) => {
+    checkAuthentication(context)
+    dataValidator(data, {
+        title: 'string',
+        desc: 'string',
+        username: 'string',
+        image: 'string'
+    })
+    const mimeType = data.image.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/)[1];
+    const base64EncodedImageString = data.image.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = new Buffer(base64EncodedImageString, 'base64');
+
+    const filename = `projects/${data.title}.${mimeTypes.detectExtension(mimeType)}`;
+    const file = admin.storage().bucket().file(filename);
+    await file.save(imageBuffer, { contentType: 'image/jpeg' });
+    const fileUrl = await file.getSignedUrl({ action: 'read', expires: '03-09-2491' }).then(urls => urls[0]);
+
+    return admin.firestore().collection('projects').add({
+        title: data.title,
+        author: data.username,
+        description: data.desc,
+        isPublic: true,
+        owner: context.auth.uid,
+        imgUrl: fileUrl
+    })
+
+})
+
+exports.createPublicProfile = functions.https.onCall(async (data, context) => {
     checkAuthentication(context)
     dataValidator(data, {
         email: 'string',
@@ -32,25 +60,33 @@ exports.createPublicProfile = functions.https.onCall((data, context) => {
     })
     admin.firestore().collection('users').doc(context.auth.uid).set({
         username: data.username,
-        email: data.email
+        email: data.email,
+        numberOfPosts: 0,
+        numberOfComments: 0
     })
-})
+})    
 
 exports.postComment = functions.https.onCall(async (data, context) => {
     checkAuthentication(context)
     dataValidator(data, {
+        username: 'string',
         message: 'string',
         id: 'string'
     })
-    const snapshot = await db.collection('users').doc(context.auth.uid).get()
-    const username = await snapshot.data().username
-    return db.collection('projects').doc(data.id).collection('comments').add({
+    
+    db.collection('projects').doc(data.id).collection('comments').add({
         message: data.message,
         authorId: context.auth.uid,
-        author: username,
+        author: data.username,
         createdAt: admin.firestore.Timestamp.now()
     })
+
+    db.collection('users').doc(context.auth.uid).update({
+        numberOfComments: admin.firestore.FieldValue.increment(1)
+    })
 })
+
+
 
 function dataValidator(data, validKeys) {
     if(Object.keys(data).length !== Object.keys(validKeys).length){
