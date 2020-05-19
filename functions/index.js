@@ -47,7 +47,8 @@ exports.createProject = functions.https.onCall(async (data, context) => {
         description: data.desc,
         isPublic: true,
         owner: context.auth.uid,
-        imgUrl: fileUrl
+        imgUrl: fileUrl,
+        createdAt: admin.firestore.Timestamp.now()
     })
 
 })
