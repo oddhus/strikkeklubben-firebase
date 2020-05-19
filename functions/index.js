@@ -13,17 +13,6 @@ admin.initializeApp()
 
 const db = admin.firestore()
 
-// exports.createProfile = functions.auth
-//   .user()
-//   .onCreate((userRecord, context) => {
-//     return admin
-//       .database()
-//       .ref(`/userProfile/${userRecord.data.uid}`)
-//       .set({
-//         email: userRecord.data.email
-//     });
-// });
-
 exports.createProject = functions.https.onCall(async (data, context) => {
     checkAuthentication(context)
     dataValidator(data, {
